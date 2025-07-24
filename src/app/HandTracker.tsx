@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 
 const HANDS_SCRIPT = "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
 const DRAWING_SCRIPT = "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js";
@@ -106,6 +106,14 @@ const SIGN_LABELS = [
   "L (L-shape)"
 ];
 
+const SIGN_EMOJIS: Record<string, string> = {
+  "A (Fist)": "✊",
+  "B (Open Palm)": "🖐️",
+  "C (C-shape)": "🤏",
+  "V (Peace)": "✌️",
+  "L (L-shape)": "🤟",
+};
+
 const HandTracker: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,17 +131,14 @@ const HandTracker: React.FC = () => {
       await loadScript(HANDS_SCRIPT);
       await loadScript(DRAWING_SCRIPT);
       await loadScript(CAMERA_SCRIPT);
-
       if (!isMounted) return;
-      // @ts-ignore
-      hands = new window.Hands({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+      hands = new (window as any).Hands({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
       hands.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7,
       });
-
       hands.onResults((results: any) => {
         const canvas = canvasRef.current;
         const video = videoRef.current;
@@ -143,14 +148,16 @@ const HandTracker: React.FC = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        let detectedSign = "";
         let detectedLandmarks = null;
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
           for (const landmarks of results.multiHandLandmarks) {
-            // @ts-ignore
-            window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
-            // @ts-ignore
-            window.drawLandmarks(ctx, landmarks, { color: "#FF0000", lineWidth: 1 });
+            const drawConnectors = (window as any).drawConnectors;
+            const drawLandmarks = (window as any).drawLandmarks;
+            const HAND_CONNECTIONS = (window as any).HAND_CONNECTIONS;
+            if (drawConnectors && drawLandmarks && HAND_CONNECTIONS) {
+              drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
+              drawLandmarks(ctx, landmarks, { color: "#FF0000", lineWidth: 1 });
+            }
             detectedLandmarks = landmarks;
             // Flatten landmarks to [x1, y1, z1, ...]
             const flatLandmarks = landmarks.flatMap((lm: any) => [lm.x, lm.y, lm.z]);
@@ -165,9 +172,7 @@ const HandTracker: React.FC = () => {
         setLastLandmarks(detectedLandmarks);
         ctx.restore();
       });
-
-      // @ts-ignore
-      camera = new window.Camera(videoRef.current, {
+      camera = new (window as any).Camera(videoRef.current, {
         onFrame: async () => {
           await hands.send({ image: videoRef.current });
         },
@@ -177,9 +182,7 @@ const HandTracker: React.FC = () => {
       camera.start();
       cameraRef.current = camera;
     }
-
     setup();
-
     return () => {
       isMounted = false;
       if (cameraRef.current) {
@@ -209,16 +212,23 @@ const HandTracker: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full">
       <div className="relative w-[360px] h-[270px]">
         <video ref={videoRef} className="absolute top-0 left-0 w-full h-full" style={{ display: "none" }} />
-        <canvas ref={canvasRef} width={360} height={270} className="rounded shadow-lg border border-gray-300 dark:border-gray-700" />
+        <canvas ref={canvasRef} width={360} height={270} className="rounded-xl shadow-lg border border-gray-300 dark:border-gray-700" />
       </div>
       <div className="mt-4 text-xl font-semibold text-blue-700 dark:text-blue-300 min-h-[2rem]">
         {sign ? `Detected Sign: ${sign}` : "Show a sign to the camera!"}
       </div>
-      {/* Data collection UI */}
-      <div className="mt-6 flex flex-col items-center gap-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow w-full max-w-xs">
+      <div className="flex flex-wrap justify-center gap-2 mb-6 w-full max-w-xs">
+        {SIGN_LABELS.map(label => (
+          <div key={label} className={`flex flex-col items-center px-2 py-1 rounded-lg transition-all duration-300 ${sign === label ? "bg-blue-500 text-white scale-110 shadow-lg" : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200"}`}>
+            <span className="text-2xl">{SIGN_EMOJIS[label]}</span>
+            <span className="text-xs font-medium">{label.replace(/ \(.*/, "")}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-col items-center gap-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow w-full max-w-xs">
         <label className="font-medium mb-1">Label for Data Collection:</label>
         <select
           className="p-2 rounded border border-gray-300 dark:bg-gray-900 dark:text-white"
@@ -230,14 +240,14 @@ const HandTracker: React.FC = () => {
           ))}
         </select>
         <button
-          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 transition-all duration-200"
           onClick={handleCapture}
           disabled={!lastLandmarks}
         >
           Capture Sample
         </button>
         <button
-          className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+          className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 transition-all duration-200"
           onClick={handleDownload}
           disabled={dataset.length === 0}
         >
