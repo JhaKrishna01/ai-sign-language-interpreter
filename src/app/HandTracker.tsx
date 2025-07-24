@@ -20,6 +20,23 @@ function loadScript(src: string) {
   });
 }
 
+// Add this function to call the Flask API
+async function getPrediction(landmarks: number[]): Promise<string | null> {
+  try {
+    const response = await fetch('http://localhost:5000/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ landmarks }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.prediction;
+  } catch (err) {
+    console.error('Prediction API error:', err);
+    return null;
+  }
+}
+
 // Simple rule-based classifier for demo: recognizes 'A' (fist) and 'B' (open palm)
 function classifySign(landmarks: any[]): string {
   if (!landmarks || landmarks.length !== 21) return "";
@@ -134,11 +151,17 @@ const HandTracker: React.FC = () => {
             window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             // @ts-ignore
             window.drawLandmarks(ctx, landmarks, { color: "#FF0000", lineWidth: 1 });
-            detectedSign = classifySign(landmarks);
             detectedLandmarks = landmarks;
+            // Flatten landmarks to [x1, y1, z1, ...]
+            const flatLandmarks = landmarks.flatMap((lm: any) => [lm.x, lm.y, lm.z]);
+            getPrediction(flatLandmarks).then(prediction => {
+              if (prediction) setSign(prediction);
+              else setSign("");
+            });
           }
+        } else {
+          setSign("");
         }
-        setSign(detectedSign);
         setLastLandmarks(detectedLandmarks);
         ctx.restore();
       });

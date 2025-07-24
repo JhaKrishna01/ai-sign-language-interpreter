@@ -4,16 +4,23 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from tensorflow import keras
-import tensorflowjs as tfjs
+model = keras.Sequential([keras.layers.Input(shape=(3,)), keras.layers.Dense(1)])
+model.save('test_model.h5')
+#import tensorflowjs as tfjs
 
-# 1. Load dataset
-with open('sign_language_dataset.json', 'r') as f:
-    data = json.load(f)
+# Use the full path or a relative path if running from the project root
+file_path = r"C:\Users\KRISHNSA JHA\OneDrive - vitap.ac.in\Desktop\cursor project\web dev project 1\ai-sign-language-interpreter\data\sign_language_dataset_augmented.json"
+
+with open(file_path, 'r') as f:
+    dataset = json.load(f)
+
+# Print the first sample to check the structure
+print(dataset[0])
 
 # 2. Flatten landmarks and extract labels
 X = []
 y = []
-for sample in data:
+for sample in dataset:
     # Each sample['landmarks'] is a list of 21 dicts with x, y, z
     flat = []
     for lm in sample['landmarks']:
@@ -50,8 +57,7 @@ print(f"Test accuracy: {acc:.2f}")
 with open('label_classes.json', 'w') as f:
     json.dump(le.classes_.tolist(), f)
 
-# 9. Export to TensorFlow.js format
-# This will create a 'tfjs_model' directory
-print("Exporting model to TensorFlow.js format...")
-tfjs.converters.save_keras_model(model, 'tfjs_model')
-print("Done! Upload the 'tfjs_model' folder and 'label_classes.json' to your web app.") 
+# 9. Save model in HDF5 format for later conversion
+print("Saving model as my_model.h5 for TensorFlow.js conversion...")
+model.save('my_model.h5')
+print("Done! Now use the Node.js tensorflowjs_converter to convert this file to tfjs format.") 
